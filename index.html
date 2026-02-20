@@ -1,0 +1,1114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>SINGULARITY: Gravity Collapse | Ultimate Edition</title>
+    <style>
+      /* ==========================================================================
+       INDUSTRIAL GRADE CSS - SCI-FI UI & HUD
+       ========================================================================== */
+      :root {
+        --bg: #030305;
+        --p1: #00f0ff; /* Cyan */
+        --p2: #ff0055; /* Magenta */
+        --warn: #ffb700;
+        --danger: #ff0000;
+        --font-main: "Arial Black", Impact, sans-serif;
+        --font-mono: "Courier New", Courier, monospace;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      body,
+      html {
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+        overflow: hidden;
+        font-family: var(--font-main);
+        color: #fff;
+        touch-action: none;
+      }
+
+      /* 渲染层 */
+      #engine-container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        background: #000;
+      }
+      canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      /* CRT 扫描线与暗角 */
+      .post-process {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 50;
+        pointer-events: none;
+        background:
+          linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+          radial-gradient(circle, transparent 40%, #000 120%);
+        background-size:
+          100% 4px,
+          100% 100%;
+        opacity: 0.8;
+        mix-blend-mode: overlay;
+      }
+
+      /* ================= UI HUD 层 ================= */
+      #hud-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 100;
+        pointer-events: none;
+        display: flex;
+      }
+
+      /* 左右触控防区 */
+      .control-zone {
+        flex: 1;
+        position: relative;
+        pointer-events: auto;
+        cursor: crosshair;
+      }
+      .control-zone::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        transition: background 0.1s;
+      }
+      .control-zone:active::before {
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      /* 数据仪表盘 */
+      .dashboard {
+        position: absolute;
+        top: 5%;
+        width: 40%;
+        height: 100px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        font-family: var(--font-mono);
+        pointer-events: none;
+      }
+      #dash-p1 {
+        left: 5%;
+        align-items: flex-start;
+      }
+      #dash-p2 {
+        right: 5%;
+        align-items: flex-end;
+        text-align: right;
+      }
+
+      .dash-title {
+        font-size: 1.5vh;
+        opacity: 0.5;
+        letter-spacing: 2px;
+      }
+      .dash-apm {
+        font-size: 5vh;
+        font-weight: bold;
+        text-shadow: 0 0 10px currentColor;
+      }
+      #dash-p1 .dash-apm {
+        color: var(--p1);
+      }
+      #dash-p2 .dash-apm {
+        color: var(--p2);
+      }
+
+      /* 高级热量槽 (Heat Gauge) */
+      .heat-gauge-container {
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        margin-top: 10px;
+        position: relative;
+        overflow: hidden;
+        border-radius: 2px;
+      }
+      .heat-bar {
+        height: 100%;
+        width: 0%;
+        transition:
+          width 0.05s linear,
+          background-color 0.2s;
+      }
+      #heat-p1 .heat-bar {
+        background: var(--p1);
+        box-shadow: 0 0 10px var(--p1);
+      }
+      #heat-p2 .heat-bar {
+        background: var(--p2);
+        box-shadow: 0 0 10px var(--p2);
+      }
+      .heat-gauge-container.overheat .heat-bar {
+        background: var(--danger) !important;
+        box-shadow: 0 0 15px var(--danger);
+        animation: pulse 0.2s infinite;
+      }
+
+      /* 状态警告信息 */
+      .warning-msg {
+        position: absolute;
+        top: 120px;
+        font-size: 2vh;
+        color: var(--danger);
+        font-weight: bold;
+        letter-spacing: 2px;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .overheat-active .warning-msg {
+        opacity: 1;
+        animation: glitch 0.2s infinite;
+      }
+
+      /* 中央引力牵引槽 */
+      .tug-bar-wrapper {
+        position: absolute;
+        bottom: 5%;
+        left: 10%;
+        width: 80%;
+        height: 15px;
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        z-index: 100;
+      }
+      .tug-core-line {
+        position: absolute;
+        left: 50%;
+        top: -10px;
+        width: 2px;
+        height: 35px;
+        background: #fff;
+        z-index: 10;
+        box-shadow: 0 0 10px #fff;
+      }
+      #tug-fill {
+        height: 100%;
+        width: 50%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        background: linear-gradient(90deg, var(--p1), #fff, var(--p2));
+        transition: width 0.1s ease-out;
+        box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.5);
+      }
+
+      /* 游戏状态与标题 */
+      #center-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        z-index: 200;
+        pointer-events: none;
+        width: 100%;
+      }
+      .title-main {
+        font-size: 8vh;
+        letter-spacing: 1vw;
+        text-shadow:
+          0 10px 30px rgba(0, 0, 0, 0.8),
+          0 0 20px #fff;
+        text-transform: uppercase;
+      }
+      .title-sub {
+        font-size: 2vh;
+        font-family: var(--font-mono);
+        opacity: 0.7;
+        margin-top: 10px;
+        letter-spacing: 2px;
+      }
+      .btn-engage {
+        margin-top: 30px;
+        padding: 15px 40px;
+        background: transparent;
+        border: 2px solid #fff;
+        color: #fff;
+        font-size: 2vh;
+        font-family: var(--font-mono);
+        font-weight: bold;
+        cursor: pointer;
+        pointer-events: auto;
+        transition: 0.3s;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        box-shadow:
+          inset 0 0 0 rgba(255, 255, 255, 0),
+          0 0 15px rgba(255, 255, 255, 0.2);
+      }
+      .btn-engage:hover {
+        background: #fff;
+        color: #000;
+        box-shadow:
+          inset 0 0 20px rgba(255, 255, 255, 1),
+          0 0 30px rgba(255, 255, 255, 0.5);
+      }
+
+      /* 绝境红屏效果 */
+      .fatal-vignette {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 10;
+        pointer-events: none;
+        box-shadow: inset 0 0 150px rgba(255, 0, 0, 0);
+        transition: box-shadow 0.5s;
+      }
+      .fatal-left {
+        box-shadow: inset 150px 0 150px -50px rgba(255, 0, 0, 0.8);
+        animation: pulseDanger 1s infinite alternate;
+      }
+      .fatal-right {
+        box-shadow: inset -150px 0 150px -50px rgba(255, 0, 0, 0.8);
+        animation: pulseDanger 1s infinite alternate;
+      }
+
+      /* CSS 动画关键帧 */
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      @keyframes pulseDanger {
+        0% {
+          opacity: 0.6;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+      @keyframes glitch {
+        0% {
+          transform: translate(0);
+        }
+        20% {
+          transform: translate(-2px, 2px);
+        }
+        40% {
+          transform: translate(-2px, -2px);
+        }
+        60% {
+          transform: translate(2px, 2px);
+        }
+        80% {
+          transform: translate(2px, -2px);
+        }
+        100% {
+          transform: translate(0);
+        }
+      }
+      .glitch-text {
+        animation: glitch 0.1s infinite;
+        color: var(--danger);
+        text-shadow:
+          -2px 0 var(--p1),
+          2px 0 var(--p2);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="engine-container">
+      <canvas id="main-canvas"></canvas>
+      <div class="fatal-vignette" id="fatal-overlay"></div>
+      <div class="post-process"></div>
+
+      <div id="hud-layer">
+        <div class="control-zone" id="zone-p1">
+          <div class="dashboard" id="dash-p1">
+            <div class="dash-title">SYS.BLUE // APM</div>
+            <div class="dash-apm" id="apm-p1">000</div>
+            <div class="heat-gauge-container" id="heat-p1">
+              <div class="heat-bar"></div>
+            </div>
+            <div class="warning-msg">CRITICAL OVERLOAD</div>
+          </div>
+        </div>
+
+        <div class="control-zone" id="zone-p2">
+          <div class="dashboard" id="dash-p2">
+            <div class="dash-title">SYS.MAGENTA // APM</div>
+            <div class="dash-apm" id="apm-p2">000</div>
+            <div class="heat-gauge-container" id="heat-p2">
+              <div class="heat-bar"></div>
+            </div>
+            <div class="warning-msg">CRITICAL OVERLOAD</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tug-bar-wrapper">
+        <div id="tug-fill"></div>
+        <div class="tug-core-line"></div>
+      </div>
+
+      <div id="center-overlay">
+        <div class="title-main" id="main-text">SINGULARITY</div>
+        <div class="title-sub" id="sub-text">GRAVITATIONAL TUG OF WAR</div>
+        <button class="btn-engage" id="btn-start">INITIALIZE SEQUENCE</button>
+      </div>
+    </div>
+
+    <script>
+      /**
+       * ==========================================================================
+       * SINGULARITY ENGINE - Ultimate HTML5 Architecture
+       * Zero Dependencies. Procedural Rendering & Audio. Object-Oriented Design.
+       * ==========================================================================
+       */
+
+      // --- CONFIGURATION ---
+      const CFG = {
+        pullForce: 0.8, // 基础拉力
+        fatalMult: 1.8, // 绝境翻倍乘数
+        friction: 0.94, // 阻尼系数
+        heatAdd: 12, // 每次点击增加热量
+        heatDecay: 60, // 每秒散热量
+        heatMax: 100, // 过热阈值
+        overheatTime: 1.8, // 过热惩罚时间(秒)
+        colors: { p1: "#00f0ff", p2: "#ff0055", core: "#ffffff" },
+      };
+
+      // --- UTILITIES ---
+      const MathUtils = {
+        lerp: (a, b, t) => a + (b - a) * t,
+        rand: (min, max) => Math.random() * (max - min) + min,
+        distance: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1),
+      };
+
+      /**
+       * ==========================================================================
+       * SUBSYSTEM 1: PROCEDURAL AUDIO SYNTHESIZER (Web Audio API)
+       * 工业级动态自适应音效系统
+       * ==========================================================================
+       */
+      class SynthEngine {
+        constructor() {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+          this.masterGain = this.ctx.createGain();
+          this.masterGain.gain.value = 0.8;
+
+          // 动态压缩器，防止爆音
+          this.compressor = this.ctx.createDynamicsCompressor();
+          this.compressor.threshold.value = -10;
+          this.compressor.knee.value = 40;
+          this.compressor.ratio.value = 12;
+          this.masterGain.connect(this.compressor);
+          this.compressor.connect(this.ctx.destination);
+
+          this.drone = null;
+          this.droneGain = null;
+          this.kickInterval = null;
+          this.isInitialized = false;
+        }
+
+        init() {
+          if (this.ctx.state === "suspended") this.ctx.resume();
+          if (this.isInitialized) return;
+          this.isInitialized = true;
+
+          // 背景引力嗡嗡声 (Drone)
+          this.drone = this.ctx.createOscillator();
+          this.drone.type = "sawtooth";
+          this.drone.frequency.value = 40; // 极低频
+
+          this.droneGain = this.ctx.createGain();
+          this.droneGain.gain.value = 0; // 初始静音
+
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = "lowpass";
+          filter.frequency.value = 150;
+
+          this.drone.connect(filter);
+          filter.connect(this.droneGain);
+          this.droneGain.connect(this.masterGain);
+          this.drone.start();
+        }
+
+        // 更新背景音乐的压迫感 (根据黑洞偏离中心的距离)
+        updateTension(stressFactor) {
+          // stressFactor 0 to 1
+          if (!this.isInitialized) return;
+          // 增加音量
+          this.droneGain.gain.setTargetAtTime(
+            0.05 + stressFactor * 0.2,
+            this.ctx.currentTime,
+            0.1,
+          );
+          // 增加频率 (音调变高)
+          this.drone.frequency.setTargetAtTime(
+            40 + stressFactor * 60,
+            this.ctx.currentTime,
+            0.1,
+          );
+        }
+
+        // 发射能量光束音效
+        playLaser(player) {
+          if (!this.isInitialized) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          // 蓝方高频脆响，红方低频沉闷
+          osc.type = player === 1 ? "square" : "triangle";
+          const startFreq = player === 1 ? 800 : 400;
+
+          osc.frequency.setValueAtTime(startFreq, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(
+            40,
+            this.ctx.currentTime + 0.2,
+          );
+
+          gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            this.ctx.currentTime + 0.2,
+          );
+
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.2);
+        }
+
+        // 过热警报音
+        playAlarm() {
+          if (!this.isInitialized) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = "sawtooth";
+
+          // 模拟警笛的高低交替
+          osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+          osc.frequency.linearRampToValueAtTime(
+            400,
+            this.ctx.currentTime + 0.1,
+          );
+          osc.frequency.linearRampToValueAtTime(
+            600,
+            this.ctx.currentTime + 0.2,
+          );
+
+          gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
+
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.4);
+        }
+
+        // 终结黑洞爆炸音
+        playExplosion() {
+          if (!this.isInitialized) return;
+          const bufferSize = this.ctx.sampleRate * 2.0; // 2秒
+          const buffer = this.ctx.createBuffer(
+            1,
+            bufferSize,
+            this.ctx.sampleRate,
+          );
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            data[i] =
+              (Math.random() * 2 - 1) *
+              Math.exp(-i / (this.ctx.sampleRate * 0.5)); // 白噪声衰减
+          }
+
+          const noise = this.ctx.createBufferSource();
+          noise.buffer = buffer;
+
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = "lowpass";
+          filter.frequency.setValueAtTime(2000, this.ctx.currentTime);
+          filter.frequency.exponentialRampToValueAtTime(
+            50,
+            this.ctx.currentTime + 1.5,
+          );
+
+          const gain = this.ctx.createGain();
+          gain.gain.setValueAtTime(1.0, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            this.ctx.currentTime + 2.0,
+          );
+
+          noise.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.masterGain);
+          noise.start();
+
+          // 瞬间静音背景音
+          this.droneGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+        }
+      }
+      const audio = new SynthEngine();
+
+      /**
+       * ==========================================================================
+       * SUBSYSTEM 2: ADVANCED PARTICLE & VFX ENGINE
+       * 高性能 Canvas 2D 粒子池引擎
+       * ==========================================================================
+       */
+      class Particle {
+        constructor() {
+          this.active = false;
+          this.x = 0;
+          this.y = 0;
+          this.vx = 0;
+          this.vy = 0;
+          this.color = "#fff";
+          this.size = 1;
+          this.life = 0;
+          this.maxLife = 1;
+          this.type = 0; // 0:Spark, 1:Accretion
+        }
+        spawn(x, y, vx, vy, color, size, life, type = 0) {
+          this.x = x;
+          this.y = y;
+          this.vx = vx;
+          this.vy = vy;
+          this.color = color;
+          this.size = size;
+          this.maxLife = life;
+          this.life = life;
+          this.type = type;
+          this.active = true;
+        }
+        update(dt, cx, cy) {
+          if (!this.active) return;
+          this.life -= dt;
+          if (this.life <= 0) {
+            this.active = false;
+            return;
+          }
+
+          if (this.type === 0) {
+            // 普通火花，带阻力
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            this.vx *= 0.95;
+            this.vy *= 0.95;
+          } else if (this.type === 1) {
+            // 吸积盘粒子：被中心引力捕获并旋转
+            const dx = cx - this.x;
+            const dy = cy - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const force = 5000 / (dist * dist + 10);
+            const angle = Math.atan2(dy, dx);
+            // 施加向心力和切线力(旋转)
+            this.vx +=
+              Math.cos(angle) * force * dt - Math.sin(angle) * force * dt * 2;
+            this.vy +=
+              Math.sin(angle) * force * dt + Math.cos(angle) * force * dt * 2;
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            this.vx *= 0.98;
+            this.vy *= 0.98;
+          }
+        }
+        draw(ctx) {
+          if (!this.active) return;
+          const alpha = Math.max(0, this.life / this.maxLife);
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = this.color;
+
+          if (this.type === 1) {
+            // 拉长的光轨
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * alpha, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.fillRect(this.x, this.y, this.size, this.size);
+          }
+        }
+      }
+
+      class VFXManager {
+        constructor(canvasId) {
+          this.canvas = document.getElementById(canvasId);
+          this.ctx = this.canvas.getContext("2d", { alpha: false });
+          this.width = 0;
+          this.height = 0;
+
+          this.particles = Array.from({ length: 1000 }, () => new Particle());
+          this.beams = []; // 能量光束
+          this.shake = 0;
+
+          this.resize();
+          window.addEventListener("resize", () => this.resize());
+        }
+        resize() {
+          this.width = this.canvas.width = window.innerWidth;
+          this.height = this.canvas.height = window.innerHeight;
+        }
+        addScreenShake(amt) {
+          this.shake = Math.min(this.shake + amt, 50);
+        }
+
+        emit(x, y, color, count, type = 0) {
+          let spawned = 0;
+          for (let p of this.particles) {
+            if (!p.active) {
+              const angle = Math.random() * Math.PI * 2;
+              const speed =
+                type === 1 ? MathUtils.rand(50, 200) : MathUtils.rand(100, 500);
+              p.spawn(
+                x,
+                y,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed,
+                color,
+                MathUtils.rand(2, 5),
+                MathUtils.rand(0.5, 1.5),
+                type,
+              );
+              spawned++;
+              if (spawned >= count) break;
+            }
+          }
+        }
+
+        addBeam(startX, startY, targetX, targetY, color) {
+          this.beams.push({
+            sx: startX,
+            sy: startY,
+            tx: targetX,
+            ty: targetY,
+            color: color,
+            progress: 0,
+            life: 0.3,
+          });
+        }
+
+        updateAndDraw(dt, state) {
+          // 1. 物理计算
+          if (this.shake > 0) this.shake *= 0.9;
+          const dx = (Math.random() - 0.5) * this.shake;
+          const dy = (Math.random() - 0.5) * this.shake;
+
+          const cx = (state.corePosition / 100) * this.width;
+          const cy = this.height / 2;
+
+          // 2. 清屏与矩阵变换
+          this.ctx.setTransform(1, 0, 0, 1, dx, dy);
+          this.ctx.fillStyle = "#030305";
+          this.ctx.fillRect(
+            -this.shake,
+            -this.shake,
+            this.width + this.shake * 2,
+            this.height + this.shake * 2,
+          );
+
+          this.ctx.globalCompositeOperation = "lighter";
+
+          // 3. 绘制能量光束 (贝塞尔曲线)
+          for (let i = this.beams.length - 1; i >= 0; i--) {
+            let b = this.beams[i];
+            b.progress += dt / b.life;
+            if (b.progress >= 1) {
+              this.beams.splice(i, 1);
+              continue;
+            }
+
+            // 动态终点(追踪奇点)
+            b.tx = cx;
+
+            this.ctx.beginPath();
+            this.ctx.moveTo(b.sx, b.sy);
+            // 控制点产生弯曲感
+            const cpX = (b.sx + b.tx) / 2;
+            const cpY =
+              b.sy +
+              (b.sx < this.width / 2 ? 200 : -200) *
+                Math.sin(b.progress * Math.PI);
+
+            this.ctx.quadraticCurveTo(cpX, cpY, b.tx, b.ty);
+            this.ctx.strokeStyle = b.color;
+            this.ctx.lineWidth = 5 * (1 - b.progress);
+            this.ctx.globalAlpha = 1 - b.progress;
+            this.ctx.stroke();
+          }
+
+          // 4. 绘制中心奇点与吸积盘
+          this.ctx.globalAlpha = 1.0;
+          const coreSize = 60 + Math.abs(state.coreVelocity) * 2;
+
+          // 吸积盘发光
+          const grad = this.ctx.createRadialGradient(
+            cx,
+            cy,
+            coreSize * 0.1,
+            cx,
+            cy,
+            coreSize * 2,
+          );
+          grad.addColorStop(0, "#fff");
+          grad.addColorStop(
+            0.2,
+            state.corePosition < 50 ? CFG.colors.p1 : CFG.colors.p2,
+          );
+          grad.addColorStop(1, "transparent");
+          this.ctx.fillStyle = grad;
+          this.ctx.beginPath();
+          this.ctx.arc(cx, cy, coreSize * 2, 0, Math.PI * 2);
+          this.ctx.fill();
+
+          // 纯黑视界
+          this.ctx.globalCompositeOperation = "source-over";
+          this.ctx.fillStyle = "#000";
+          this.ctx.beginPath();
+          this.ctx.arc(cx, cy, coreSize * 0.3, 0, Math.PI * 2);
+          this.ctx.fill();
+          this.ctx.globalCompositeOperation = "lighter";
+
+          // 5. 更新与绘制粒子
+          for (let p of this.particles) {
+            p.update(dt, cx, cy);
+            p.draw(this.ctx);
+          }
+
+          this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+          this.ctx.globalAlpha = 1.0;
+          this.ctx.globalCompositeOperation = "source-over";
+        }
+      }
+
+      /**
+       * ==========================================================================
+       * SUBSYSTEM 3: GAME LOGIC & STATE MACHINE
+       * 核心游戏逻辑与状态管理
+       * ==========================================================================
+       */
+      class Player {
+        constructor(id) {
+          this.id = id; // 1 or 2
+          this.heat = 0;
+          this.overheated = false;
+          this.overheatTimer = 0;
+
+          // APM 计算相关
+          this.taps = [];
+          this.currentAPM = 0;
+
+          // UI Nodes
+          this.uiZone = document.getElementById(`zone-p${id}`);
+          this.uiHeatBar = document.querySelector(`#heat-p${id} .heat-bar`);
+          this.uiHeatCont = document.getElementById(`heat-p${id}`);
+          this.uiAPM = document.getElementById(`apm-p${id}`);
+        }
+
+        update(dt) {
+          // 热量冷却
+          if (!this.overheated) {
+            this.heat = Math.max(0, this.heat - CFG.heatDecay * dt);
+          } else {
+            this.overheatTimer -= dt;
+            if (this.overheatTimer <= 0) {
+              this.overheated = false;
+              this.heat = 0;
+              this.uiZone.classList.remove("overheat-active");
+              this.uiHeatCont.classList.remove("overheat");
+            }
+          }
+
+          // APM 滑动窗口计算 (过去2秒的点击数换算为分钟)
+          const now = performance.now();
+          this.taps = this.taps.filter((t) => now - t < 2000);
+          this.currentAPM = Math.floor((this.taps.length / 2) * 60);
+
+          // 更新 UI
+          this.uiHeatBar.style.width = `${(this.heat / CFG.heatMax) * 100}%`;
+          this.uiAPM.innerText = this.currentAPM.toString().padStart(3, "0");
+        }
+
+        tap() {
+          if (this.overheated) return false;
+
+          this.taps.push(performance.now());
+          this.heat += CFG.heatAdd;
+
+          if (this.heat >= CFG.heatMax) {
+            this.overheated = true;
+            this.overheatTimer = CFG.overheatTime;
+            this.uiZone.classList.add("overheat-active");
+            this.uiHeatCont.classList.add("overheat");
+            audio.playAlarm();
+            return false;
+          }
+          return true;
+        }
+      }
+
+      class GameEngine {
+        constructor() {
+          this.vfx = new VFXManager("main-canvas");
+          this.p1 = new Player(1);
+          this.p2 = new Player(2);
+
+          this.state = "TITLE"; // TITLE, PLAYING, GAMEOVER
+          this.corePosition = 50;
+          this.coreVelocity = 0;
+
+          this.lastTime = performance.now();
+          this.uiTugFill = document.getElementById("tug-fill");
+
+          this.bindInputs();
+          requestAnimationFrame((t) => this.loop(t));
+        }
+
+        bindInputs() {
+          const handleTap = (playerNum, x, y) => {
+            if (this.state !== "PLAYING") return;
+            const p = playerNum === 1 ? this.p1 : this.p2;
+            if (p.tap()) {
+              // 绝境倍率判定
+              const inDangerP1 = this.corePosition < 20;
+              const inDangerP2 = this.corePosition > 80;
+              let force = CFG.pullForce;
+
+              if (playerNum === 1 && inDangerP1) force *= CFG.fatalMult;
+              if (playerNum === 2 && inDangerP2) force *= CFG.fatalMult;
+
+              this.coreVelocity += playerNum === 1 ? -force : force;
+
+              audio.playLaser(playerNum);
+              this.vfx.addScreenShake(3);
+
+              // 视觉反馈：光束与粒子
+              const color = playerNum === 1 ? CFG.colors.p1 : CFG.colors.p2;
+              this.vfx.addBeam(
+                x,
+                y,
+                (this.corePosition / 100) * this.vfx.width,
+                this.vfx.height / 2,
+                color,
+              );
+
+              // 在奇点处产生吸积粒子
+              this.vfx.emit(
+                (this.corePosition / 100) * this.vfx.width,
+                this.vfx.height / 2,
+                color,
+                5,
+                1,
+              );
+            }
+          };
+
+          // 触屏支持
+          document.getElementById("zone-p1").addEventListener(
+            "touchstart",
+            (e) => {
+              e.preventDefault();
+              Array.from(e.changedTouches).forEach((t) =>
+                handleTap(1, t.clientX, t.clientY),
+              );
+            },
+            { passive: false },
+          );
+          document.getElementById("zone-p2").addEventListener(
+            "touchstart",
+            (e) => {
+              e.preventDefault();
+              Array.from(e.changedTouches).forEach((t) =>
+                handleTap(2, t.clientX, t.clientY),
+              );
+            },
+            { passive: false },
+          );
+          // 鼠标支持
+          document
+            .getElementById("zone-p1")
+            .addEventListener("mousedown", (e) =>
+              handleTap(1, e.clientX, e.clientY),
+            );
+          document
+            .getElementById("zone-p2")
+            .addEventListener("mousedown", (e) =>
+              handleTap(2, e.clientX, e.clientY),
+            );
+
+          // 键盘支持
+          document.addEventListener("keydown", (e) => {
+            if (e.repeat) return;
+            if (e.code === "Space")
+              handleTap(1, this.vfx.width * 0.25, this.vfx.height / 2);
+            if (e.code === "Enter" || e.code === "NumpadEnter")
+              handleTap(2, this.vfx.width * 0.75, this.vfx.height / 2);
+          });
+
+          // 启动按钮
+          document
+            .getElementById("btn-start")
+            .addEventListener("click", () => this.startMatch());
+        }
+
+        startMatch() {
+          audio.init();
+          this.state = "PLAYING";
+          this.corePosition = 50;
+          this.coreVelocity = 0;
+          this.p1.heat = 0;
+          this.p2.heat = 0;
+          this.p1.overheated = false;
+          this.p2.overheated = false;
+
+          document.getElementById("center-overlay").style.display = "none";
+
+          // 开局特效爆发
+          this.vfx.emit(
+            this.vfx.width / 2,
+            this.vfx.height / 2,
+            "#fff",
+            100,
+            0,
+          );
+          this.vfx.addScreenShake(20);
+        }
+
+        endMatch(winner) {
+          this.state = "GAMEOVER";
+          audio.playExplosion();
+          this.vfx.addScreenShake(50);
+
+          // 终结大爆炸粒子
+          const winColor = winner === 1 ? CFG.colors.p1 : CFG.colors.p2;
+          this.vfx.emit(
+            (this.corePosition / 100) * this.vfx.width,
+            this.vfx.height / 2,
+            winColor,
+            300,
+            0,
+          );
+
+          const title = document.getElementById("main-text");
+          const sub = document.getElementById("sub-text");
+
+          title.innerHTML =
+            winner === 1
+              ? "SYS.BLUE<br>VICTORIOUS"
+              : "SYS.MAGENTA<br>VICTORIOUS";
+          title.style.color = winColor;
+          title.classList.add("glitch-text");
+          sub.innerText = "CRITICAL MASS ACHIEVED";
+
+          document.getElementById("center-overlay").style.display = "block";
+          const btn = document.getElementById("btn-start");
+          btn.innerText = "REBOOT SYSTEM";
+          btn.style.display = "none";
+
+          setTimeout(() => {
+            title.classList.remove("glitch-text");
+            btn.style.display = "inline-block";
+          }, 3000);
+        }
+
+        loop(currentTime) {
+          const dt = (currentTime - this.lastTime) / 1000; // 转换为秒
+          this.lastTime = currentTime;
+
+          // 防止休眠唤醒时的巨大 dt 导致物理崩坏
+          if (dt > 0.1) {
+            requestAnimationFrame((t) => this.loop(t));
+            return;
+          }
+
+          if (this.state === "PLAYING") {
+            this.p1.update(dt);
+            this.p2.update(dt);
+
+            // 物理积分
+            this.corePosition += this.coreVelocity * dt * 60; // 适应60帧基准
+            this.coreVelocity *= CFG.friction;
+
+            // 边界检测
+            if (this.corePosition <= 0) {
+              this.corePosition = 0;
+              this.endMatch(1);
+            }
+            if (this.corePosition >= 100) {
+              this.corePosition = 100;
+              this.endMatch(2);
+            }
+
+            // 更新音效张力
+            const stress = Math.abs(this.corePosition - 50) / 50;
+            audio.updateTension(stress);
+
+            // 震动反馈
+            if (stress > 0.5) this.vfx.addScreenShake(stress * 2);
+
+            // 更新 UI 槽
+            this.uiTugFill.style.width = `${this.corePosition}%`;
+
+            // 绝境红屏判定
+            const fatalOverlay = document.getElementById("fatal-overlay");
+            fatalOverlay.className = "fatal-vignette"; // reset
+            if (this.corePosition < 20)
+              fatalOverlay.classList.add("fatal-left");
+            else if (this.corePosition > 80)
+              fatalOverlay.classList.add("fatal-right");
+          }
+
+          // 渲染管线
+          this.vfx.updateAndDraw(dt, {
+            corePosition: this.corePosition,
+            coreVelocity: this.coreVelocity,
+          });
+
+          requestAnimationFrame((t) => this.loop(t));
+        }
+      }
+
+      // ================= BOOTSTRAP =================
+      window.onload = () => {
+        // 防止移动端长按选中文本/菜单
+        document.addEventListener("contextmenu", (event) =>
+          event.preventDefault(),
+        );
+        const engine = new GameEngine();
+      };
+    </script>
+  </body>
+</html>
