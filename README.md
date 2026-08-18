@@ -9,4 +9,4 @@ the system hits `CRITICAL MASS ACHIEVED`. Then you reboot and try to last longer
 
 ## Tech
 
-Single-file HTML5 Canvas app — Ultimate Edition. No build step, no dependencies.
+One `index.html` file, Canvas 2D.
