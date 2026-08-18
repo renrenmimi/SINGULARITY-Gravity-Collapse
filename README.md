@@ -1,4 +1,4 @@
-# Singularity: Gravity Collapse 🌌
+# Singularity: Gravity Collapse
 
 **▶ [Play now](https://renrenmimi.github.io/SINGULARITY-Gravity-Collapse/)** — runs in your browser, nothing to install.
 
