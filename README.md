@@ -5,6 +5,8 @@
 Survive around a collapsing singularity. Mass accumulates, gravity tightens, and eventually
 the system hits `CRITICAL MASS ACHIEVED`. Then you reboot and try to last longer.
 
+![Surviving around a collapsing singularity](docs/screenshot.jpg)
+
 ## Tech
 
 Single-file HTML5 Canvas app — Ultimate Edition. No build step, no dependencies.
