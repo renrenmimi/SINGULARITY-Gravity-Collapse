@@ -280,6 +280,125 @@
           0 0 30px rgba(255, 255, 255, 0.5);
       }
 
+      /* 本局战报 */
+      .run-summary {
+        margin-top: 14px;
+        min-height: 1.8vh;
+        font-family: var(--font-mono);
+        font-size: 1.7vh;
+        letter-spacing: 2px;
+        color: var(--warn);
+        text-shadow: 0 0 12px currentColor;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .run-summary.on {
+        opacity: 0.95;
+      }
+
+      /* 本地档案（历史记录） */
+      .archive {
+        margin: 26px auto 0;
+        width: min(430px, 80vw);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(0, 0, 0, 0.5);
+        box-shadow:
+          inset 0 0 40px rgba(0, 240, 255, 0.05),
+          0 0 24px rgba(0, 0, 0, 0.7);
+        font-family: var(--font-mono);
+        pointer-events: auto;
+      }
+      .arc-row {
+        display: flex;
+        align-items: stretch;
+      }
+      .arc-cell {
+        flex: 1;
+        padding: 10px 6px 12px;
+      }
+      .arc-sep {
+        width: 1px;
+        background: rgba(255, 255, 255, 0.14);
+      }
+      .arc-label {
+        font-size: max(9px, 1.25vh);
+        letter-spacing: 2px;
+        opacity: 0.45;
+      }
+      .arc-value {
+        margin-top: 4px;
+        font-size: 3.1vh;
+        font-weight: bold;
+        letter-spacing: 1px;
+        text-shadow: 0 0 12px currentColor;
+      }
+      #arc-apm {
+        color: var(--p1);
+      }
+      #arc-time {
+        color: var(--p2);
+      }
+      .arc-value.empty {
+        color: #fff;
+        opacity: 0.22;
+        text-shadow: none;
+      }
+      .arc-cell.fresh .arc-value {
+        animation: pulse 0.45s infinite;
+      }
+      .arc-cell.fresh .arc-label {
+        opacity: 1;
+        color: var(--warn);
+      }
+      .arc-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 6px 6px 6px 12px;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.03);
+      }
+      #arc-note {
+        font-size: max(9px, 1.25vh);
+        letter-spacing: 2px;
+        opacity: 0.5;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #arc-note.hot {
+        opacity: 1;
+        color: var(--warn);
+        text-shadow: 0 0 10px currentColor;
+      }
+      .btn-purge {
+        flex-shrink: 0;
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        color: #fff;
+        font-family: var(--font-mono);
+        font-size: max(9px, 1.25vh);
+        font-weight: bold;
+        letter-spacing: 2px;
+        padding: 5px 12px;
+        cursor: pointer;
+        pointer-events: auto;
+        opacity: 0.55;
+        transition: 0.2s;
+      }
+      .btn-purge:hover {
+        opacity: 1;
+        border-color: var(--danger);
+        color: var(--danger);
+      }
+      .btn-purge.armed {
+        opacity: 1;
+        border-color: var(--danger);
+        color: var(--danger);
+        animation: pulse 0.6s infinite;
+      }
+
       /* 绝境红屏效果 */
       .fatal-vignette {
         position: absolute;
@@ -386,7 +505,26 @@
       <div id="center-overlay">
         <div class="title-main" id="main-text">SINGULARITY</div>
         <div class="title-sub" id="sub-text">GRAVITATIONAL TUG OF WAR</div>
+        <div class="run-summary" id="run-summary"></div>
         <button class="btn-engage" id="btn-start">INITIALIZE SEQUENCE</button>
+
+        <div class="archive" id="archive-panel">
+          <div class="arc-row">
+            <div class="arc-cell" id="arc-cell-apm">
+              <div class="arc-label">RECORD // PEAK APM</div>
+              <div class="arc-value empty" id="arc-apm">---</div>
+            </div>
+            <div class="arc-sep"></div>
+            <div class="arc-cell" id="arc-cell-time">
+              <div class="arc-label">RECORD // LONGEST STAND</div>
+              <div class="arc-value empty" id="arc-time">--:--</div>
+            </div>
+          </div>
+          <div class="arc-foot">
+            <span id="arc-note">NO TELEMETRY ON RECORD</span>
+            <button class="btn-purge" id="btn-purge">PURGE</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -416,6 +554,193 @@
         rand: (min, max) => Math.random() * (max - min) + min,
         distance: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1),
       };
+
+      /**
+       * ==========================================================================
+       * SUBSYSTEM 0: LOCAL RECORD VAULT
+       * 只跑在本机的战绩档案。localStorage 在隐私模式、配额写满或被手动改坏时
+       * 一律降级为「暂无记录」，绝不把异常抛回主循环。
+       * ==========================================================================
+       */
+      const RecordVault = (() => {
+        const KEY = "singularity.records.v1";
+        const BLANK = { peakAPM: 0, longestMs: 0 };
+        let cache = Object.assign({}, BLANK);
+        let backed = true; // 本机是否真的能落盘
+
+        // 某些环境下连读取 window.localStorage 都会直接抛 SecurityError
+        function shelf() {
+          try {
+            return window.localStorage || null;
+          } catch (e) {
+            return null;
+          }
+        }
+        function sane(n) {
+          const v = Number(n);
+          return Number.isFinite(v) && v > 0 ? v : 0;
+        }
+        function load() {
+          const ls = shelf();
+          if (!ls) {
+            backed = false;
+            cache = Object.assign({}, BLANK);
+            return;
+          }
+          try {
+            const raw = ls.getItem(KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            cache = {
+              peakAPM: sane(parsed && parsed.peakAPM),
+              longestMs: sane(parsed && parsed.longestMs),
+            };
+          } catch (e) {
+            // 非法 JSON / 被手工编辑过 → 当成一张白纸
+            cache = Object.assign({}, BLANK);
+          }
+        }
+        function persist() {
+          const ls = shelf();
+          if (!ls) {
+            backed = false;
+            return false;
+          }
+          try {
+            ls.setItem(KEY, JSON.stringify(cache));
+            return true;
+          } catch (e) {
+            backed = false; // 配额写满或隐私模式：本局照常，只是留不下来
+            return false;
+          }
+        }
+
+        load();
+
+        return {
+          get() {
+            return Object.assign({}, cache);
+          },
+          isPersistent() {
+            return backed;
+          },
+          // 回传本局刷新了哪几项，让界面能当场喊出来
+          submit(apm, ms) {
+            const a = sane(apm);
+            const m = sane(ms);
+            const beat = { apm: a > cache.peakAPM, time: m > cache.longestMs };
+            if (beat.apm) cache.peakAPM = a;
+            if (beat.time) cache.longestMs = m;
+            if (beat.apm || beat.time) persist();
+            return beat;
+          },
+          clear() {
+            cache = Object.assign({}, BLANK);
+            const ls = shelf();
+            if (!ls) {
+              backed = false;
+              return false;
+            }
+            try {
+              ls.removeItem(KEY);
+              return true;
+            } catch (e) {
+              backed = false;
+              return false;
+            }
+          },
+        };
+      })();
+
+      // 档案面板渲染
+      const Archive = (() => {
+        const fmtStand = (ms) => {
+          const total = Math.max(0, ms) / 1000;
+          const m = Math.floor(total / 60);
+          const s = total - m * 60;
+          return m + ":" + (s < 10 ? "0" : "") + s.toFixed(1);
+        };
+        const fmtAPM = (n) => String(Math.round(n)).padStart(3, "0");
+
+        function paint(beat) {
+          const r = RecordVault.get();
+          const apmEl = document.getElementById("arc-apm");
+          const timeEl = document.getElementById("arc-time");
+          const noteEl = document.getElementById("arc-note");
+          if (!apmEl || !timeEl || !noteEl) return;
+
+          const hasAPM = r.peakAPM > 0;
+          const hasTime = r.longestMs > 0;
+          apmEl.innerText = hasAPM ? fmtAPM(r.peakAPM) : "---";
+          timeEl.innerText = hasTime ? fmtStand(r.longestMs) : "--:--";
+          apmEl.classList.toggle("empty", !hasAPM);
+          timeEl.classList.toggle("empty", !hasTime);
+
+          document
+            .getElementById("arc-cell-apm")
+            .classList.toggle("fresh", !!(beat && beat.apm));
+          document
+            .getElementById("arc-cell-time")
+            .classList.toggle("fresh", !!(beat && beat.time));
+
+          const fresh = !!(beat && (beat.apm || beat.time));
+          let note;
+          if (fresh && !RecordVault.isPersistent()) {
+            note = "NEW RECORD // SESSION ONLY, NOT SAVED";
+          } else if (fresh) {
+            note =
+              beat.apm && beat.time
+                ? "NEW RECORD // BOTH LOGS REWRITTEN"
+                : beat.apm
+                  ? "NEW RECORD // PEAK APM"
+                  : "NEW RECORD // LONGEST STAND";
+          } else if (!RecordVault.isPersistent()) {
+            note = "SESSION ONLY // STORAGE UNAVAILABLE";
+          } else if (!hasAPM && !hasTime) {
+            note = "NO TELEMETRY ON RECORD";
+          } else {
+            note = "LOCAL ARCHIVE // THIS MACHINE ONLY";
+          }
+          noteEl.innerText = note;
+          noteEl.classList.toggle("hot", fresh);
+        }
+
+        function summary(text) {
+          const el = document.getElementById("run-summary");
+          if (!el) return;
+          el.innerText = text || "";
+          el.classList.toggle("on", !!text);
+        }
+
+        // 清档：先武装再确认，避免手滑一键抹掉
+        function wirePurge() {
+          const btn = document.getElementById("btn-purge");
+          if (!btn) return;
+          let armedAt = 0;
+          let timer = null;
+          const disarm = () => {
+            armedAt = 0;
+            btn.innerText = "PURGE";
+            btn.classList.remove("armed");
+          };
+          btn.addEventListener("click", () => {
+            if (timer) clearTimeout(timer);
+            if (armedAt && Date.now() - armedAt < 5000) {
+              RecordVault.clear();
+              disarm();
+              paint(null);
+              const noteEl = document.getElementById("arc-note");
+              if (noteEl) noteEl.innerText = "ARCHIVE PURGED";
+              return;
+            }
+            armedAt = Date.now();
+            btn.innerText = "CONFIRM";
+            btn.classList.add("armed");
+            timer = setTimeout(disarm, 5000);
+          });
+        }
+
+        return { paint, summary, fmtStand, fmtAPM, wirePurge };
+      })();
 
       /**
        * ==========================================================================
@@ -890,10 +1215,16 @@
           this.corePosition = 50;
           this.coreVelocity = 0;
 
+          // 本局战绩：撑了多久 + 双方触及过的最高 APM
+          this.matchStart = 0;
+          this.matchPeakAPM = 0;
+
           this.lastTime = performance.now();
           this.uiTugFill = document.getElementById("tug-fill");
 
           this.bindInputs();
+          Archive.wirePurge();
+          Archive.paint(null);
           requestAnimationFrame((t) => this.loop(t));
         }
 
@@ -993,6 +1324,15 @@
           this.p2.heat = 0;
           this.p1.overheated = false;
           this.p2.overheated = false;
+          this.p1.taps = [];
+          this.p2.taps = [];
+          this.p1.currentAPM = 0;
+          this.p2.currentAPM = 0;
+
+          this.matchStart = performance.now();
+          this.matchPeakAPM = 0;
+          Archive.summary("");
+          Archive.paint(null);
 
           document.getElementById("center-overlay").style.display = "none";
 
@@ -1012,6 +1352,10 @@
           audio.playExplosion();
           this.vfx.addScreenShake(50);
 
+          // 结算本局并对账历史档案
+          const stand = performance.now() - this.matchStart;
+          const beat = RecordVault.submit(this.matchPeakAPM, stand);
+
           // 终结大爆炸粒子
           const winColor = winner === 1 ? CFG.colors.p1 : CFG.colors.p2;
           this.vfx.emit(
@@ -1022,6 +1366,26 @@
             0,
           );
 
+          // 破纪录时补一发金色礼花，让它自己会说话
+          if (beat.apm || beat.time) {
+            this.vfx.emit(
+              (this.corePosition / 100) * this.vfx.width,
+              this.vfx.height / 2,
+              "#ffb700",
+              200,
+              0,
+            );
+            this.vfx.addScreenShake(30);
+          }
+
+          Archive.summary(
+            "STOOD " +
+              Archive.fmtStand(stand) +
+              "   //   PEAK APM " +
+              Archive.fmtAPM(this.matchPeakAPM),
+          );
+          Archive.paint(beat);
+
           const title = document.getElementById("main-text");
           const sub = document.getElementById("sub-text");
 
@@ -1031,7 +1395,10 @@
               : "SYS.MAGENTA<br>VICTORIOUS";
           title.style.color = winColor;
           title.classList.add("glitch-text");
-          sub.innerText = "CRITICAL MASS ACHIEVED";
+          sub.innerText =
+            beat.apm || beat.time
+              ? "CRITICAL MASS ACHIEVED // ARCHIVE REWRITTEN"
+              : "CRITICAL MASS ACHIEVED";
 
           document.getElementById("center-overlay").style.display = "block";
           const btn = document.getElementById("btn-start");
@@ -1057,6 +1424,13 @@
           if (this.state === "PLAYING") {
             this.p1.update(dt);
             this.p2.update(dt);
+
+            // 本局峰值 APM：两侧谁打得最凶就算谁的
+            this.matchPeakAPM = Math.max(
+              this.matchPeakAPM,
+              this.p1.currentAPM,
+              this.p2.currentAPM,
+            );
 
             // 物理积分
             this.corePosition += this.coreVelocity * dt * 60; // 适应60帧基准
